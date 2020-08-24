@@ -2,6 +2,7 @@ package xhttp
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/thecodingmachine/gotenberg/internal/pkg/conf"
 )
 
@@ -10,10 +11,17 @@ func New(config conf.Config) *echo.Echo {
 	srv := echo.New()
 	srv.HideBanner = true
 	srv.HidePort = true
+
 	srv.Use(contextMiddleware(config))
 	srv.Use(loggerMiddleware(config))
 	srv.Use(cleanupMiddleware())
 	srv.Use(errorMiddleware())
+
+
+//key based authorization for security
+	srv.Use(middleware.KeyAuth(func(key string, c echo.Context) (bool, error) {
+ 		 return key == "valid-key", nil
+	}))
 	srv.GET(pingEndpoint(config), pingHandler)
 	srv.POST(mergeEndpoint(config), mergeHandler)
 	if config.DisableGoogleChrome() && config.DisableUnoconv() {
@@ -27,5 +35,11 @@ func New(config conf.Config) *echo.Echo {
 	if !config.DisableUnoconv() {
 		srv.POST(officeEndpoint(config), officeHandler)
 	}
+	//new endpoint  handler calling
+	if !config.DisableUnoconv() {
+		srv.POST(officeEndpointHello(config), officeHeloHandler)
+	}
+
 	return srv
 }
+
