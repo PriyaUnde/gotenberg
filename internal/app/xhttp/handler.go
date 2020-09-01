@@ -1,17 +1,7 @@
 package xhttp
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"mime/multipart"
-	"net/http"
-	"os"
-	"path/filepath"
-	"runtime"
-
 	"github.com/labstack/echo/v4"
 	"github.com/thecodingmachine/gotenberg/internal/app/xhttp/pkg/context"
 	"github.com/thecodingmachine/gotenberg/internal/app/xhttp/pkg/resource"
@@ -20,6 +10,8 @@ import (
 	"github.com/thecodingmachine/gotenberg/internal/pkg/xerror"
 	"github.com/thecodingmachine/gotenberg/internal/pkg/xrand"
 	"github.com/thecodingmachine/gotenberg/internal/pkg/xtime"
+	"net/http"
+	"os"
 )
 
 func pingEndpoint(config conf.Config) string {
@@ -46,9 +38,7 @@ func officeEndpoint(config conf.Config) string {
 	return fmt.Sprintf("%s%s", config.RootPath(), "convert/office")
 }
 
-func officeEndpointHello(config conf.Config) string {
-	return fmt.Sprintf("%s%s", config.RootPath(), "convert/hello")
-}
+
 
 
 func isMultipartFormDataEndpoint(config conf.Config, path string) bool {
@@ -68,12 +58,7 @@ func isMultipartFormDataEndpoint(config conf.Config, path string) bool {
 			officeEndpoint(config),
 		)
 	}
-	if !config.DisableUnoconv() {
-		multipartFormDataEndpoints = append(
-			multipartFormDataEndpoints,
-			officeEndpointHello(config),
-		)
-	}
+
 	for _, endpoint := range multipartFormDataEndpoints {
 		if endpoint == path {
 			return true
@@ -248,82 +233,6 @@ func officeHandler(c echo.Context) error {
 	return nil
 }
 
-// new end point which take filepath and create request
-func officeHeloHandler(cp echo.Context) error{
-
-	//fileName := cp.FormValue("filename")
-	path := cp.FormValue("path")
-	url := "http://localhost:3000/convert/office?waitTimeout=30"
-	method := "POST"
-
-	payload := &bytes.Buffer{}
-	writer := multipart.NewWriter(payload)
-	file, errFile1 := os.Open(path)
-	defer file.Close()
-	part1,
-	errFile1 := writer.CreateFormFile("file",filepath.Base(path))
-	_, errFile1 = io.Copy(part1, file)
-	if errFile1 !=nil {
-
-		return errFile1
-	}
-	err := writer.Close()
-	if err != nil {
-		return err
-	}
-
-
-	client := &http.Client {
-	}
-	req, err := http.NewRequest(method, url, payload)
-
-	if err != nil {
-		return err
-	}
-	req.Header.Add("Authorization", "Bearer valid-key")
-
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	res, err := client.Do(req)
-	defer res.Body.Close()
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return err
-	}
-	fmt.Println(string(body))
-
-
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		return errors.New("failed to generate the result PDF")
-	}
-	return writeNewFile("result.pdf", res.Body)
-}
-//write response in
-func writeNewFile(fpath string, in io.Reader ) error {
-if err := os.MkdirAll(filepath.Dir(fpath), 0755); err != nil {
-return fmt.Errorf("%s: making directory for file: %v", fpath, err)
-}
-out, err := os.Create(fpath)
-if err != nil {
-return fmt.Errorf("%s: creating new file: %v", fpath, err)
-}
-defer out.Close() // nolint: errcheck
-err = out.Chmod(0644)
-if err != nil && runtime.GOOS != "windows" {
-return fmt.Errorf("%s: changing file mode: %v", fpath, err)
-}
-_, err = io.Copy(out, in)
-if err != nil {
-return fmt.Errorf("%s: writing file: %v", fpath, err)
-}
-
-
-return nil
-}
 
 func convert(ctx context.Context, p printer.Printer) error {
 	const op string = "xhttp.convert"
@@ -468,4 +377,3 @@ func convertAsync(ctx context.Context, p printer.Printer, filename, fpath string
 	}()
 	return nil
 }
-
