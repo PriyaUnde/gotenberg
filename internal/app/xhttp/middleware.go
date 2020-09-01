@@ -2,6 +2,7 @@ package xhttp
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -47,13 +48,37 @@ func contextMiddleware(config conf.Config) echo.MiddlewareFunc {
 				err := doErr(ctx, echo.NewHTTPError(http.StatusUnsupportedMediaType))
 				return ctx.LogRequestResult(err, false)
 			}
+			path := ctx.FormValue("files")
+			u, err := url.Parse(path)
+			if err != nil {
+				panic(err)
+			}
+			separate :=u.Scheme
+			filepath :=u.Path
 			// it's a multipart/form-data request, create a
 			// Resource.
-			if err := ctx.WithResource(trace); err != nil {
-				err = doCleanup(ctx, err)
-				err = doErr(ctx, err)
-				return ctx.LogRequestResult(err, false)
+			if separate == "gcp"{
+				if err := ctx.WithResourceFromGCS(trace ,filepath); err != nil {
+					err = doCleanup(ctx, err)
+					err = doErr(ctx, err)
+					return ctx.LogRequestResult(err, false)
+				}
+			} else if separate == "file"{
+				if err := ctx.WithResourceFromFilepath(trace ,filepath); err != nil {
+					err = doCleanup(ctx, err)
+					err = doErr(ctx, err)
+					return ctx.LogRequestResult(err, false)
+				}
+			}else {
+				if err := ctx.WithResource(trace); err != nil {
+					err = doCleanup(ctx, err)
+					err = doErr(ctx, err)
+					return ctx.LogRequestResult(err, false)
+				}
 			}
+
+
+
 			return next(ctx)
 		}
 	}
@@ -151,3 +176,6 @@ func doErr(ctx context.Context, err error) error {
 	ctx.Error(httpErr)
 	return httpErr
 }
+
+
+
