@@ -35,10 +35,10 @@ func New(config conf.Config) *echo.Echo {
 	if !config.DisableUnoconv() {
 		srv.POST(officeEndpoint(config), officeHandler)
 	}
-	//new endpoint  handler calling
-	if !config.DisableUnoconv() {
-		srv.POST(officeEndpointHello(config), officeHeloHandler)
-	}
+
+	return srv
+}
+
 
 	return srv
 }
