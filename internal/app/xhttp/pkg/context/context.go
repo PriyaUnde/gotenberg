@@ -1,15 +1,21 @@
 package context
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"google.golang.org/api/option"
 	"io"
+	"io/ioutil"
 	"net/http"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/labstack/echo/v4"
 	"github.com/thecodingmachine/gotenberg/internal/app/xhttp/pkg/resource"
 	"github.com/thecodingmachine/gotenberg/internal/pkg/conf"
@@ -69,6 +75,74 @@ func (ctx Context) XLogger() xlog.Logger {
 func (ctx Context) Config() conf.Config {
 	return ctx.config
 }
+//get the resource from google cloud storage
+// WithResource creates a resource.Resource and
+// adds it to the Context.
+func (ctx *Context) WithResourceFromGCS(directoryName string, path string) error {
+	const op string = "context.Context.WithResource"
+	resolver := func() (resource.Resource, error) {
+		r, err := resource.New(ctx.logger, directoryName)
+		if err != nil {
+			return r, err
+		}
+		// retrieve custom headers from request.
+		for key, value := range ctx.Request().Header {
+			r.WithCustomHTTPHeader(key, value[0])
+		}
+		// retrieve form values from request.
+		for _, key := range resource.ArgKeys() {
+			r.WithArg(key, ctx.FormValue(string(key)))
+		}
+
+		bucket := string([]rune(filepath.Dir(path))[1:])
+		object:=filepath.Base(path)
+		// write form files from request.
+       data, _ := downloadFile(os.Stdout,bucket,object,"/home/MyKey.json")
+		in :=bytes.NewReader(data)
+
+		if err := r.WithFile(object, in); err != nil {
+			return r, err
+		}
+		return r, nil
+	}
+	resource, err := resolver()
+	ctx.resource = resource
+	if err != nil {
+		return xerror.New(op, err)
+	}
+	return nil
+}
+//get the file from file system when path is provided
+func (ctx *Context) WithResourceFromFilepath(directoryName string, path string) error {
+	const op string = "context.Context.WithResource"
+	resolver := func() (resource.Resource, error) {
+		r, err := resource.New(ctx.logger, directoryName)
+		if err != nil {
+			return r, err
+		}
+		// retrieve custom headers from request.
+		for key, value := range ctx.Request().Header {
+			r.WithCustomHTTPHeader(key, value[0])
+		}
+		// retrieve form values from request.
+		for _, key := range resource.ArgKeys() {
+			r.WithArg(key, ctx.FormValue(string(key)))
+		}
+		file, _ := os.Open(path)
+		defer file.Close()
+		filename := filepath.Base(path)
+		if err := r.WithFile(filename, file); err != nil {
+			return r, err
+		}
+		return r, nil
+	}
+	resource, err := resolver()
+	ctx.resource = resource
+	if err != nil {
+		return xerror.New(op, err)
+	}
+	return nil
+}
 
 // WithResource creates a resource.Resource and
 // adds it to the Context.
@@ -122,6 +196,33 @@ func (ctx *Context) WithResource(directoryName string) error {
 		return xerror.New(op, err)
 	}
 	return nil
+}
+//download file from google cloud storage
+func  downloadFile(w io.Writer, bucket, object string, jsonPath string) ([]byte, error) {
+// bucket := "bucket-name"
+// object := "object-name"
+ctx := context.Background()
+	client, err := storage.NewClient(ctx, option.WithCredentialsFile(jsonPath))
+if err != nil {
+return nil, fmt.Errorf("storage.NewClient: %v", err)
+}
+defer client.Close()
+
+ctx, cancel := context.WithTimeout(ctx, time.Second*50)
+defer cancel()
+
+rc, err := client.Bucket(bucket).Object(object).NewReader(ctx)
+if err != nil {
+return nil, fmt.Errorf("Object(%q).NewReader: %v", object, err)
+}
+defer rc.Close()
+
+data, err := ioutil.ReadAll(rc)
+if err != nil {
+return nil, fmt.Errorf("ioutil.ReadAll: %v", err)
+}
+fmt.Println(w, "Blob %v downloaded.\n", object)
+return data, nil
 }
 
 // HasResource returns true if the Context
