@@ -40,6 +40,5 @@ func New(config conf.Config) *echo.Echo {
 }
 
 
-	return srv
-}
+	
 
